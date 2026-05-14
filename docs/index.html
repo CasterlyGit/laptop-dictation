@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>laptop-dictation — push-to-talk Whisper, local, clipboard-ready</title>
+<meta name="description" content="Hold a hotkey, talk, get the transcription in your clipboard. Local Whisper.cpp, no cloud round-trip. Interactive demo." />
+<style>
+  :root {
+    --bg: #0a0b0f;
+    --bg-elev: #14161d;
+    --bg-card: #1a1d27;
+    --text: #f1f3f5;
+    --text-dim: #7a8190;
+    --text-faint: #4a5160;
+    --accent: #00d4a8;
+    --accent-glow: rgba(0, 212, 168, 0.5);
+    --accent-soft: rgba(0, 212, 168, 0.12);
+    --warm: #ffb547;
+    --mono: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+    --body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); font-family: var(--body); -webkit-font-smoothing: antialiased; min-height: 100vh; }
+  body {
+    background:
+      radial-gradient(900px 600px at 10% -10%, rgba(0, 212, 168, 0.07), transparent 60%),
+      radial-gradient(700px 500px at 110% 60%, rgba(106, 122, 255, 0.05), transparent 60%),
+      var(--bg);
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 24px 80px; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 36px; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .logo {
+    width: 38px; height: 38px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), #008f73);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 24px var(--accent-glow);
+  }
+  .logo svg { width: 22px; height: 22px; }
+  .brand-name { font-family: var(--mono); font-size: 14px; letter-spacing: 0.02em; }
+  .brand-name b { color: var(--accent); }
+  .repo-link {
+    font-family: var(--mono); font-size: 12px; color: var(--text-dim);
+    text-decoration: none; padding: 6px 12px; border: 1px solid var(--text-faint);
+    border-radius: 6px; transition: all 150ms;
+  }
+  .repo-link:hover { border-color: var(--text-dim); color: var(--text); }
+
+  .hero { margin-bottom: 44px; }
+  h1 {
+    font-size: clamp(28px, 5vw, 44px); line-height: 1.1; letter-spacing: -0.02em;
+    font-weight: 700; margin-bottom: 14px;
+  }
+  h1 .accent { color: var(--accent); }
+  .lede { font-size: 16px; color: var(--text-dim); max-width: 640px; line-height: 1.55; }
+  .lede kbd {
+    font-family: var(--mono); background: var(--bg-elev); border: 1px solid #2a2e3a;
+    border-bottom-width: 2px; padding: 1px 7px; border-radius: 5px; color: var(--text); font-size: 12.5px;
+  }
+
+  .stage {
+    background: var(--bg-elev);
+    border: 1px solid #232631;
+    border-radius: 16px;
+    padding: 36px 28px 28px;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+  }
+  .hotkey-bar {
+    display: flex; align-items: center; gap: 10px; justify-content: center;
+    font-family: var(--mono); font-size: 12px; color: var(--text-dim);
+    margin-bottom: 28px;
+  }
+  .hotkey-bar kbd {
+    font-family: var(--mono); background: var(--bg-card); border: 1px solid #2a2e3a;
+    border-bottom-width: 2px; padding: 3px 9px; border-radius: 5px; color: var(--text); font-size: 12px;
+  }
+
+  .mic-wrap { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+  .mic-btn {
+    width: 130px; height: 130px; border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid #2c303c;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: all 200ms ease-out;
+    position: relative;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+  }
+  .mic-btn svg { width: 56px; height: 56px; stroke: var(--text-dim); transition: stroke 180ms; }
+  .mic-btn:hover { border-color: var(--accent); }
+  .mic-btn:hover svg { stroke: var(--accent); }
+  .mic-btn.recording {
+    background: var(--accent-soft); border-color: var(--accent);
+    box-shadow: 0 0 0 8px rgba(0,212,168,0.06), 0 0 40px var(--accent-glow);
+    animation: rec-pulse 1.5s ease-in-out infinite;
+  }
+  .mic-btn.recording svg { stroke: var(--accent); }
+  @keyframes rec-pulse {
+    50% { box-shadow: 0 0 0 16px rgba(0,212,168,0.04), 0 0 60px var(--accent-glow); }
+  }
+  .mic-btn.transcribing {
+    border-color: var(--warm);
+    background: rgba(255,181,71,0.08);
+    box-shadow: 0 0 30px rgba(255,181,71,0.3);
+  }
+  .mic-btn.transcribing svg { stroke: var(--warm); }
+  .rec-dot { position: absolute; top: 14px; right: 18px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); opacity: 0; transition: opacity 200ms; }
+  .mic-btn.recording .rec-dot { opacity: 1; animation: blink-dot 0.9s steps(1) infinite; }
+  @keyframes blink-dot { 50% { opacity: 0.15; } }
+
+  .instruction { font-family: var(--mono); font-size: 12px; color: var(--text-dim); letter-spacing: 0.04em; text-align: center; min-height: 18px; }
+  .instruction b { color: var(--text); }
+  .instruction.live b { color: var(--accent); }
+  .instruction.transcribing b { color: var(--warm); }
+
+  .waveform {
+    width: 100%; max-width: 540px; height: 84px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: center; gap: 3px;
+  }
+  .bar { width: 4px; min-height: 3px; background: #2a2e3a; border-radius: 2px; transition: background 200ms; }
+  .waveform.live .bar { background: var(--accent); box-shadow: 0 0 6px var(--accent-glow); }
+  .waveform.transcribing .bar { background: var(--warm); }
+
+  .timer { font-family: var(--mono); font-size: 13px; color: var(--text-dim); text-align: center; min-height: 18px; }
+  .timer span.live { color: var(--accent); font-weight: 600; }
+
+  .clipboard {
+    margin-top: 30px;
+    background: var(--bg-card);
+    border: 1px solid #232631;
+    border-radius: 11px;
+    padding: 16px 18px;
+    min-height: 110px;
+    position: relative;
+    display: flex; flex-direction: column;
+    transition: border-color 250ms;
+  }
+  .clipboard.has-text { border-color: var(--accent); box-shadow: 0 0 24px rgba(0,212,168,0.08); }
+  .clipboard-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim);
+  }
+  .clipboard-head .label-l { display: flex; align-items: center; gap: 8px; }
+  .clip-icon { width: 13px; height: 13px; }
+  .clip-icon svg { width: 100%; height: 100%; stroke: var(--text-dim); }
+  .copy-btn {
+    background: transparent; border: 1px solid #2c303c; color: var(--text-dim);
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em;
+    padding: 4px 9px; border-radius: 5px; cursor: pointer;
+    transition: all 150ms;
+  }
+  .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .copy-btn.copied { color: var(--accent); border-color: var(--accent); }
+  .copy-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .transcript {
+    font-family: var(--body); font-size: 15px; line-height: 1.55; color: var(--text);
+    min-height: 48px;
+  }
+  .transcript.placeholder { color: var(--text-faint); font-style: italic; font-size: 13.5px; }
+  .typing-cursor { display: inline-block; width: 8px; height: 16px; background: var(--accent); margin-left: 2px; vertical-align: middle; animation: blink 0.85s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .stats {
+    display: flex; gap: 18px; margin-top: 14px;
+    font-family: var(--mono); font-size: 11px; color: var(--text-dim);
+    flex-wrap: wrap;
+  }
+  .stats .stat span { color: var(--text); }
+
+  .samples {
+    margin-top: 30px;
+    padding: 16px 18px 18px;
+    background: var(--bg-card);
+    border: 1px dashed #2a2e3a;
+    border-radius: 10px;
+  }
+  .samples-head { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 10px; }
+  .samples-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+  .sample-btn {
+    text-align: left; background: var(--bg-elev); color: var(--text);
+    border: 1px solid #262a35; border-radius: 7px;
+    padding: 9px 12px; font-family: var(--body); font-size: 12.5px; line-height: 1.4;
+    cursor: pointer; transition: all 140ms;
+  }
+  .sample-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .sample-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .sample-btn .sample-label { font-family: var(--mono); font-size: 10px; color: var(--text-dim); display: block; margin-bottom: 2px; letter-spacing: 0.06em; }
+
+  .features {
+    margin-top: 56px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px;
+  }
+  .feat {
+    background: var(--bg-elev); border: 1px solid #232631; border-radius: 12px; padding: 20px;
+  }
+  .feat h3 { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
+  .feat p { color: var(--text-dim); font-size: 13.5px; line-height: 1.55; }
+  .feat p b { color: var(--text); font-weight: 600; }
+
+  footer { margin-top: 56px; text-align: center; font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+  footer a { color: var(--text-dim); text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+
+  @media (max-width: 600px) {
+    .wrap { padding: 28px 16px 60px; }
+    .stage { padding: 28px 20px 22px; }
+    .mic-btn { width: 110px; height: 110px; }
+    .samples-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2"/><path d="M12 19v3"/>
+        </svg>
+      </div>
+      <div class="brand-name">laptop<b>-dictation</b></div>
+    </div>
+    <a class="repo-link" href="https://github.com/CasterlyGit/laptop-dictation" target="_blank" rel="noopener">view code →</a>
+  </header>
+
+  <section class="hero">
+    <h1>hold a hotkey,<br/>speak, <span class="accent">paste anywhere</span>.</h1>
+    <p class="lede">Push-to-talk Whisper.cpp running locally on your laptop. No cloud round-trip. No "Hey computer". Default hotkey is <kbd>Right Option</kbd> — hold to record, release to transcribe to clipboard. Optional auto-paste + auto-submit turns it into a real voice interface for Claude Code, chat boxes, anything.</p>
+  </section>
+
+  <section class="stage">
+    <div class="hotkey-bar">
+      <span>simulated hotkey:</span>
+      <kbd>⌥</kbd>
+      <span>hold the mic to record · release to transcribe</span>
+    </div>
+
+    <div class="mic-wrap">
+      <div class="mic-btn" id="mic" role="button" tabindex="0" aria-label="hold to record">
+        <span class="rec-dot"></span>
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 11v2a7 7 0 0 0 14 0v-2"/><path d="M12 20v2"/>
+        </svg>
+      </div>
+      <div class="instruction" id="instruction">hold <b>mic</b> to record · or pick a sample below</div>
+      <div class="waveform" id="waveform"></div>
+      <div class="timer" id="timer">&nbsp;</div>
+    </div>
+
+    <div class="clipboard" id="clipboard">
+      <div class="clipboard-head">
+        <span class="label-l">
+          <span class="clip-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></span>
+          clipboard
+        </span>
+        <button class="copy-btn" id="copyBtn" disabled>copy</button>
+      </div>
+      <div class="transcript placeholder" id="transcript">your transcription will land here</div>
+      <div class="stats" id="stats" style="display:none">
+        <div class="stat">audio: <span id="s-dur">—</span></div>
+        <div class="stat">model: <span id="s-model">whisper-cpp small</span></div>
+        <div class="stat">transcription: <span id="s-time">—</span></div>
+        <div class="stat">backend: <span style="color:var(--accent)">local</span></div>
+      </div>
+    </div>
+
+    <div class="samples">
+      <div class="samples-head">pre-baked samples — click to play one through the full pipeline</div>
+      <div class="samples-grid" id="samples"></div>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="feat">
+      <h3>// Local</h3>
+      <p>whisper.cpp runs on your laptop. <b>No API key. No network.</b> ~250 ms transcription for a 5-second clip on M2 with the small model.</p>
+    </div>
+    <div class="feat">
+      <h3>// Push-to-talk</h3>
+      <p>Hold the hotkey, talk, release. No wake word, no five-second timeout that cuts you off mid-thought. <b>Works anywhere</b> cmd+V works.</p>
+    </div>
+    <div class="feat">
+      <h3>// Voice → Claude Code</h3>
+      <p>Turn on <b>auto_paste + auto_submit</b> in the config: focus Claude chat → hold ⌥ → speak → message lands and sends. <b>No keyboard, no clicks.</b></p>
+    </div>
+  </section>
+
+  <footer>
+    built by <a href="https://github.com/CasterlyGit" target="_blank" rel="noopener">@CasterlyGit</a> · this demo simulates the real pipeline with pre-baked waveforms + transcripts · <a href="https://github.com/CasterlyGit/laptop-dictation" target="_blank" rel="noopener">see the code</a>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const SAMPLES = [
+    {
+      label: 'prompt for Claude Code',
+      duration: 6.2,
+      transcript: "Refactor the auth module to use the new session token format. Make sure the existing tests still pass and add one for the rotation case.",
+      waveform: 'speech'
+    },
+    {
+      label: 'voice note',
+      duration: 4.4,
+      transcript: "Note to self: the prompt caching TTL on Anthropic is five minutes, so the warm window is shorter than I had in my head.",
+      waveform: 'calm'
+    },
+    {
+      label: 'long-form thinking',
+      duration: 8.1,
+      transcript: "I think the right shape for this is a single static demo page per repo, served from GitHub Pages, with one accent color per project but the same overall design language so it feels like one builder.",
+      waveform: 'energetic'
+    },
+    {
+      label: 'technical vocab',
+      duration: 5.0,
+      transcript: "Add a pyproject extra called dev that pulls in pytest, pytest-asyncio, ruff, and mypy. Pin to the same versions as the curby repo for consistency.",
+      waveform: 'speech'
+    }
+  ];
+
+  const BAR_COUNT = 56;
+  const waveform = document.getElementById('waveform');
+  for (let i = 0; i < BAR_COUNT; i++) {
+    const b = document.createElement('div');
+    b.className = 'bar';
+    b.style.height = '4px';
+    waveform.appendChild(b);
+  }
+  const bars = Array.from(waveform.children);
+
+  const mic = document.getElementById('mic');
+  const instruction = document.getElementById('instruction');
+  const timer = document.getElementById('timer');
+  const transcript = document.getElementById('transcript');
+  const clipboard = document.getElementById('clipboard');
+  const copyBtn = document.getElementById('copyBtn');
+  const statsEl = document.getElementById('stats');
+  const sDur = document.getElementById('s-dur');
+  const sTime = document.getElementById('s-time');
+  const samplesContainer = document.getElementById('samples');
+
+  SAMPLES.forEach((s, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'sample-btn';
+    btn.innerHTML = `<span class="sample-label">${s.label} · ${s.duration}s</span>${s.transcript.slice(0, 64)}${s.transcript.length > 64 ? '…' : ''}`;
+    btn.addEventListener('click', () => playSample(s));
+    samplesContainer.appendChild(btn);
+  });
+
+  let state = 'idle'; // idle | recording | transcribing
+  let recStart = 0;
+  let rafId = null;
+  let timerId = null;
+  let pressTimer = null;
+  let currentSample = null;
+
+  function setState(s) {
+    state = s;
+    mic.classList.toggle('recording', s === 'recording');
+    mic.classList.toggle('transcribing', s === 'transcribing');
+    waveform.classList.toggle('live', s === 'recording');
+    waveform.classList.toggle('transcribing', s === 'transcribing');
+    instruction.classList.toggle('live', s === 'recording');
+    instruction.classList.toggle('transcribing', s === 'transcribing');
+    if (s === 'recording') {
+      instruction.innerHTML = '<b>recording</b> · release to transcribe';
+    } else if (s === 'transcribing') {
+      instruction.innerHTML = '<b>transcribing locally</b> · whisper-cpp small';
+    } else {
+      instruction.innerHTML = 'hold <b>mic</b> to record · or pick a sample below';
+    }
+  }
+
+  function startRecord(sample) {
+    if (state !== 'idle') return;
+    currentSample = sample || null;
+    setState('recording');
+    recStart = performance.now();
+    transcript.textContent = '';
+    transcript.classList.remove('placeholder');
+    copyBtn.disabled = true;
+    copyBtn.classList.remove('copied');
+    copyBtn.textContent = 'copy';
+    statsEl.style.display = 'none';
+    clipboard.classList.remove('has-text');
+
+    // Live waveform animation
+    let t = 0;
+    const tick = () => {
+      t += 1;
+      const elapsed = (performance.now() - recStart) / 1000;
+      timer.innerHTML = `<span class="live">● REC</span> &nbsp; ${elapsed.toFixed(1)}s`;
+      animateBars(t, currentSample?.waveform || 'speech');
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+
+    // If a sample was passed, auto-stop after its duration
+    if (currentSample) {
+      timerId = setTimeout(() => stopRecord(), currentSample.duration * 1000);
+    }
+  }
+
+  function stopRecord() {
+    if (state !== 'recording') return;
+    cancelAnimationFrame(rafId);
+    clearTimeout(timerId);
+    const elapsed = (performance.now() - recStart) / 1000;
+    setState('transcribing');
+    timer.innerHTML = `audio captured: ${elapsed.toFixed(1)}s · transcribing…`;
+
+    // Mellow the waveform during transcribing
+    let t = 0;
+    const tick = () => {
+      t += 1;
+      animateBars(t, 'transcribing');
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+
+    // Pick a transcript
+    let text;
+    let dur;
+    if (currentSample) {
+      text = currentSample.transcript;
+      dur = currentSample.duration;
+    } else {
+      // For real holds, pick a sample sized to the duration
+      text = elapsed < 3
+        ? "Quick note: this is the offline path, no network, runs on the laptop."
+        : SAMPLES[Math.floor(Math.random() * SAMPLES.length)].transcript;
+      dur = elapsed;
+    }
+
+    // Simulate transcription latency: ~250ms per second on M2
+    const txTime = Math.max(180, dur * 250);
+
+    setTimeout(() => {
+      cancelAnimationFrame(rafId);
+      flattenBars();
+      timer.textContent = '';
+      setState('idle');
+      sDur.textContent = dur.toFixed(1) + 's';
+      sTime.textContent = Math.round(txTime) + ' ms';
+      statsEl.style.display = 'flex';
+      clipboard.classList.add('has-text');
+      typeOut(text);
+      currentSample = null;
+    }, txTime);
+  }
+
+  function animateBars(t, mode) {
+    const intensity = mode === 'energetic' ? 1 : mode === 'calm' ? 0.45 : mode === 'transcribing' ? 0.35 : 0.75;
+    bars.forEach((b, i) => {
+      // Layered sine waves give an organic waveform
+      const f1 = Math.sin((t + i * 4) / 8) * 18;
+      const f2 = Math.sin((t * 1.6 + i * 2.5) / 5) * 14;
+      const f3 = Math.sin((t * 0.6 + i * 8) / 11) * 22;
+      let h = 6 + Math.abs(f1 + f2 + f3) * intensity;
+      if (mode === 'transcribing') {
+        // Smooth steady pulse
+        h = 6 + Math.abs(Math.sin((t + i * 6) / 7)) * 18 * intensity;
+      }
+      b.style.height = h.toFixed(0) + 'px';
+    });
+  }
+  function flattenBars() { bars.forEach(b => b.style.height = '4px'); }
+
+  function typeOut(text) {
+    let i = 0;
+    transcript.innerHTML = '<span class="typing-cursor"></span>';
+    const interval = setInterval(() => {
+      i++;
+      transcript.innerHTML = text.slice(0, i) + '<span class="typing-cursor"></span>';
+      if (i >= text.length) {
+        clearInterval(interval);
+        transcript.textContent = text;
+        copyBtn.disabled = false;
+      }
+    }, 14);
+  }
+
+  // Mouse + touch press
+  function press(e) { e.preventDefault(); startRecord(null); }
+  function release(e) { e.preventDefault(); stopRecord(); }
+  mic.addEventListener('mousedown', press);
+  document.addEventListener('mouseup', release);
+  mic.addEventListener('touchstart', press, { passive: false });
+  mic.addEventListener('touchend', release);
+  mic.addEventListener('touchcancel', release);
+  // keyboard
+  mic.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && state === 'idle' && !e.repeat) { e.preventDefault(); startRecord(null); }
+  });
+  mic.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') { e.preventDefault(); stopRecord(); }
+  });
+
+  function playSample(s) {
+    if (state !== 'idle') return;
+    startRecord(s);
+  }
+
+  copyBtn.addEventListener('click', async () => {
+    if (!transcript.textContent || copyBtn.disabled) return;
+    try {
+      await navigator.clipboard.writeText(transcript.textContent);
+      copyBtn.classList.add('copied');
+      copyBtn.textContent = '✓ copied';
+      setTimeout(() => { copyBtn.classList.remove('copied'); copyBtn.textContent = 'copy'; }, 1600);
+    } catch { /* clipboard may be denied in iframe; just visual */
+      copyBtn.classList.add('copied');
+      copyBtn.textContent = '✓ done';
+      setTimeout(() => { copyBtn.classList.remove('copied'); copyBtn.textContent = 'copy'; }, 1600);
+    }
+  });
+})();
+</script>
+</body>
+</html>

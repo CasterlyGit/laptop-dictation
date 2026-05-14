@@ -1,5 +1,7 @@
 # laptop-dictation
 
+**[▶ Live demo](https://casterlygit.github.io/laptop-dictation/)** — interactive: hold the mic button, see a live waveform, release for a transcribed result in a clipboard-style box.
+
 > Hold a hotkey, speak, get the text in your clipboard. Local Whisper, no cloud round-trip. Built so I can brainstorm with Claude Code on my laptop the same way I do on my phone.
 
 **Status:** v0.2 — push-to-talk + **auto-submit into the focused app**. Works on macOS (Apple Silicon, Intel). Linux is best-effort.
