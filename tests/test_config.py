@@ -15,6 +15,8 @@ def test_default_config_values():
     assert cfg.transcription.model == "small"
     assert cfg.output.copy_to_clipboard is True
     assert cfg.output.auto_paste is False
+    assert cfg.output.auto_submit is False
+    assert cfg.output.submit_delay_ms == 40
 
 
 def test_load_missing_returns_defaults(tmp_path: Path):
@@ -48,6 +50,16 @@ def test_default_toml_parses(tmp_path: Path):
     cfg = load_config(p)
     assert cfg.hotkey.key == "alt_r"
     assert cfg.transcription.model == "small"
+
+
+def test_load_auto_submit_override(tmp_path: Path):
+    """auto_submit + submit_delay_ms parse from TOML."""
+    p = tmp_path / "c.toml"
+    p.write_text('[output]\nauto_paste = true\nauto_submit = true\nsubmit_delay_ms = 120\n')
+    cfg = load_config(p)
+    assert cfg.output.auto_paste is True
+    assert cfg.output.auto_submit is True
+    assert cfg.output.submit_delay_ms == 120
 
 
 def test_model_file_path():

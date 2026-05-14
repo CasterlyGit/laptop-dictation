@@ -2,7 +2,9 @@
 
 > Hold a hotkey, speak, get the text in your clipboard. Local Whisper, no cloud round-trip. Built so I can brainstorm with Claude Code on my laptop the same way I do on my phone.
 
-**Status:** v0.1 — works on macOS (Apple Silicon, Intel). Linux is best-effort.
+**Status:** v0.2 — push-to-talk + **auto-submit into the focused app**. Works on macOS (Apple Silicon, Intel). Linux is best-effort.
+
+> **New in v0.2:** turn on `auto_paste` + `auto_submit` and dictation becomes a true voice interface for Claude Code / chat boxes: hold the hotkey, talk, release — text is transcribed, pasted, and Enter is pressed for you.
 
 ---
 
@@ -100,11 +102,31 @@ language = "en"           # ISO code; "auto" for detection
 [output]
 copy_to_clipboard = true
 auto_paste = false        # also send cmd+V after copying
+auto_submit = false       # press Enter after paste (great for Claude Code / chat boxes)
+submit_delay_ms = 40      # gap between paste and Enter
 
 [paths]
 whisper_cpp = "/opt/homebrew/bin/whisper-cli"
 models_dir = "~/.cache/whisper-cpp"
 ```
+
+### Voice-driving Claude Code (or any chat box)
+
+Set both flags on and pick a hotkey that doesn't conflict with your editor:
+
+```toml
+[hotkey]
+key = "alt_r"             # hold right-option to talk
+
+[output]
+copy_to_clipboard = true
+auto_paste = true
+auto_submit = true
+```
+
+Now: focus the Claude chat box in VSCode → hold right-option → speak → release → message appears and sends. No keyboard, no clicks.
+
+**Note for Mac users:** there's no "Windows" key on macOS. The available hold-keys are `alt_r` / `alt_l` (option), `ctrl_r` / `ctrl_l`, `cmd_r` / `cmd_l`, or function keys like `f9`. Pick one your editor doesn't capture.
 
 ## Models
 
