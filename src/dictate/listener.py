@@ -13,7 +13,7 @@ from pathlib import Path
 from rich.console import Console
 
 from .config import Config
-from .output import copy_to_clipboard, send_paste_keystroke
+from .output import copy_to_clipboard, send_enter_keystroke, send_paste_keystroke
 from .recorder import start_recording, stop_recording
 from .transcribe import build_backend
 
@@ -82,6 +82,9 @@ def run_listener(cfg: Config) -> None:
             # tiny delay so the user's release keystroke doesn't collide
             time.sleep(0.08)
             send_paste_keystroke()
+            if cfg.output.auto_submit:
+                time.sleep(cfg.output.submit_delay_ms / 1000.0)
+                send_enter_keystroke()
 
     def on_press(key):
         if key == target_key and not state["pressed"]:

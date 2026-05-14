@@ -39,3 +39,14 @@ def send_paste_keystroke() -> None:
     with kb.pressed(modifier):
         kb.press("v")
         kb.release("v")
+
+
+def send_enter_keystroke() -> None:
+    """Send Enter via pynput. Used to auto-submit after paste."""
+    try:
+        from pynput.keyboard import Controller, Key
+    except ImportError:
+        return
+    kb = Controller()
+    kb.press(Key.enter)
+    kb.release(Key.enter)

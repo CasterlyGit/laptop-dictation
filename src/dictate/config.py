@@ -39,6 +39,8 @@ class TranscriptionConfig:
 class OutputConfig:
     copy_to_clipboard: bool = True
     auto_paste: bool = False
+    auto_submit: bool = False  # press Enter after paste (sends the message)
+    submit_delay_ms: int = 40  # tiny gap between paste and Enter
 
 
 @dataclass
@@ -80,6 +82,8 @@ language = "en"             # ISO code; "auto" for detection
 [output]
 copy_to_clipboard = true
 auto_paste = false          # also send cmd+V after copying
+auto_submit = false         # press Enter after paste (great for Claude Code / chat boxes)
+submit_delay_ms = 40        # gap between paste and Enter
 
 [paths]
 whisper_cpp = "/opt/homebrew/bin/whisper-cli"
