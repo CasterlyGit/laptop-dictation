@@ -68,7 +68,8 @@ class Config:
 DEFAULT_TOML = """\
 # laptop-dictation config — edit to taste
 [hotkey]
-key = "alt_r"               # hold-to-talk key. pynput key names; try "f9" or "ctrl_r".
+key = "alt_r"               # hold-to-talk. single key (pynput names: "alt_r", "f9", "ctrl_r")
+                            # OR a chord with "+": "ctrl+shift+l", "cmd+opt+space"
 
 [recording]
 sample_rate = 16000

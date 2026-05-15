@@ -4,9 +4,9 @@
 
 > Hold a hotkey, speak, get the text in your clipboard. Local Whisper, no cloud round-trip. Built so I can brainstorm with Claude Code on my laptop the same way I do on my phone.
 
-**Status:** v0.2 — push-to-talk + **auto-submit into the focused app**. Works on macOS (Apple Silicon, Intel). Linux is best-effort.
+**Status:** v0.3 — push-to-talk + chord hotkeys + **auto-submit into the focused app**. Works on macOS (Apple Silicon, Intel). Linux is best-effort.
 
-> **New in v0.2:** turn on `auto_paste` + `auto_submit` and dictation becomes a true voice interface for Claude Code / chat boxes: hold the hotkey, talk, release — text is transcribed, pasted, and Enter is pressed for you.
+> **New in v0.3:** chord hotkeys like `ctrl+shift+l`. Hold all the keys at once to record, release any one to stop. Combine with `auto_paste` + `auto_submit` for a true voice interface to Claude Code / any chat box.
 
 ---
 
@@ -90,7 +90,8 @@ dictate config
 
 ```toml
 [hotkey]
-key = "alt_r"          # pynput key name; e.g. "alt_r", "ctrl_r", "f9"
+key = "alt_r"          # single key (pynput name) — e.g. "alt_r", "ctrl_r", "f9"
+                       # or a chord with "+": "ctrl+shift+l", "cmd+opt+space"
 
 [recording]
 sample_rate = 16000
@@ -129,6 +130,17 @@ auto_submit = true
 Now: focus the Claude chat box in VSCode → hold right-option → speak → release → message appears and sends. No keyboard, no clicks.
 
 **Note for Mac users:** there's no "Windows" key on macOS. The available hold-keys are `alt_r` / `alt_l` (option), `ctrl_r` / `ctrl_l`, `cmd_r` / `cmd_l`, or function keys like `f9`. Pick one your editor doesn't capture.
+
+### Chord hotkeys (v0.3+)
+
+Combine modifiers with `+` to require multiple keys held simultaneously:
+
+```toml
+[hotkey]
+key = "ctrl+shift+l"   # hold all three at once to record; release any to stop
+```
+
+Generic modifier names (`ctrl`, `shift`, `alt`/`opt`, `cmd`) accept either left or right variant. Use a specific variant (`shift_r`, `alt_l`) to pin one side. Aliases: `option`→`alt`, `command`/`meta`/`super`→`cmd`.
 
 ## Models
 
