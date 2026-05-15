@@ -1,4 +1,8 @@
-"""Push-to-talk hotkey daemon. Hold the configured key → record. Release → transcribe.
+"""Push-to-talk hotkey daemon. Hold the configured key(s) → record. Release → transcribe.
+
+Supports single keys (`alt_r`, `f9`) and chord hotkeys (`ctrl+shift+l`).
+For chords, recording begins when all keys in the chord are held simultaneously
+and ends as soon as any one of them is released.
 
 Requires Accessibility permission on macOS (System Settings → Privacy & Security →
 Accessibility, add Terminal/iTerm).
@@ -20,30 +24,89 @@ from .transcribe import build_backend
 console = Console()
 
 
-def _resolve_pynput_key(name: str):
-    """Map config key names to pynput Key/KeyCode."""
+_MODIFIER_ALIASES: dict[str, frozenset[str]] = {
+    "ctrl": frozenset({"ctrl", "ctrl_l", "ctrl_r"}),
+    "control": frozenset({"ctrl", "ctrl_l", "ctrl_r"}),
+    "shift": frozenset({"shift", "shift_l", "shift_r"}),
+    "alt": frozenset({"alt", "alt_l", "alt_r"}),
+    "opt": frozenset({"alt", "alt_l", "alt_r"}),
+    "option": frozenset({"alt", "alt_l", "alt_r"}),
+    "cmd": frozenset({"cmd", "cmd_l", "cmd_r"}),
+    "command": frozenset({"cmd", "cmd_l", "cmd_r"}),
+    "meta": frozenset({"cmd", "cmd_l", "cmd_r"}),
+    "super": frozenset({"cmd", "cmd_l", "cmd_r"}),
+    "win": frozenset({"cmd", "cmd_l", "cmd_r"}),
+}
+
+
+def parse_hotkey(spec: str) -> list[frozenset[str]]:
+    """Parse a hotkey spec like 'alt_r' or 'ctrl+shift+l' into a list of slots.
+
+    Each slot is a frozenset of normalized pynput key names that satisfy that
+    slot. A generic 'shift' slot is satisfied by either 'shift_l' or 'shift_r';
+    a specific 'shift_r' slot is satisfied only by 'shift_r'.
+    """
+    parts = [p.strip().lower() for p in spec.split("+") if p.strip()]
+    if not parts:
+        raise ValueError(f"Empty hotkey spec: {spec!r}")
+    slots: list[frozenset[str]] = []
+    for p in parts:
+        if p in _MODIFIER_ALIASES:
+            slots.append(_MODIFIER_ALIASES[p])
+        elif len(p) == 1 or p.startswith("f") and p[1:].isdigit():
+            slots.append(frozenset({p}))
+        elif _is_known_special(p):
+            slots.append(frozenset({p}))
+        else:
+            raise ValueError(f"Unknown hotkey part: {p!r} (in spec {spec!r})")
+    return slots
+
+
+def _is_known_special(name: str) -> bool:
+    """True if `name` is a pynput Key attribute (e.g. 'space', 'tab', 'alt_r')."""
     from pynput.keyboard import Key
-    name = name.strip().lower()
-    if hasattr(Key, name):
-        return getattr(Key, name)
-    # Single character key
-    if len(name) == 1:
-        return name
-    raise ValueError(f"Unknown hotkey: {name!r}")
+    return hasattr(Key, name)
+
+
+def normalize_key(key) -> str | None:
+    """Normalize a pynput key event into a lowercase string we can match.
+
+    Returns None for keys we can't represent (dead keys, etc).
+    """
+    from pynput.keyboard import Key, KeyCode
+    if isinstance(key, Key):
+        return key.name
+    if isinstance(key, KeyCode):
+        if key.char:
+            return key.char.lower()
+        if key.vk is not None:
+            return f"vk{key.vk}"
+    return None
+
+
+def chord_satisfied(slots: list[frozenset[str]], held: set[str]) -> bool:
+    """True iff every slot has at least one of its acceptable names in `held`."""
+    return all(any(name in held for name in slot) for slot in slots)
 
 
 def run_listener(cfg: Config) -> None:
     """Block forever. Hold-to-record, release-to-transcribe."""
     from pynput.keyboard import Listener
 
-    target_key = _resolve_pynput_key(cfg.hotkey.key)
+    slots = parse_hotkey(cfg.hotkey.key)
     backend = build_backend(
         cfg.transcription.backend,
         whisper_cpp_binary=cfg.paths.whisper_cpp,
         models_dir=cfg.paths.models_dir_path,
     )
 
-    state: dict = {"proc": None, "wav": None, "pressed": False, "lock": threading.Lock()}
+    state: dict = {
+        "proc": None,
+        "wav": None,
+        "active": False,
+        "held": set(),
+        "lock": threading.Lock(),
+    }
 
     def begin():
         with state["lock"]:
@@ -79,7 +142,6 @@ def run_listener(cfg: Config) -> None:
         if cfg.output.copy_to_clipboard:
             copy_to_clipboard(text)
         if cfg.output.auto_paste:
-            # tiny delay so the user's release keystroke doesn't collide
             time.sleep(0.08)
             send_paste_keystroke()
             if cfg.output.auto_submit:
@@ -87,13 +149,21 @@ def run_listener(cfg: Config) -> None:
                 send_enter_keystroke()
 
     def on_press(key):
-        if key == target_key and not state["pressed"]:
-            state["pressed"] = True
+        name = normalize_key(key)
+        if name is None:
+            return
+        state["held"].add(name)
+        if chord_satisfied(slots, state["held"]) and not state["active"]:
+            state["active"] = True
             begin()
 
     def on_release(key):
-        if key == target_key and state["pressed"]:
-            state["pressed"] = False
+        name = normalize_key(key)
+        if name is None:
+            return
+        state["held"].discard(name)
+        if state["active"] and not chord_satisfied(slots, state["held"]):
+            state["active"] = False
             end()
 
     console.print(
