@@ -4,9 +4,11 @@
 
 > Hold a hotkey, speak, get the text in your clipboard. Local Whisper, no cloud round-trip. Built so I can brainstorm with Claude Code on my laptop the same way I do on my phone.
 
-**Status:** v0.3 — push-to-talk + chord hotkeys + **auto-submit into the focused app**. Works on macOS (Apple Silicon, Intel). Linux is best-effort.
+**Status:** v0.4 — Wispr-Flow-style insertion: hold `ctrl+3`, speak, release — the text lands wherever your cursor is. Works on macOS (Apple Silicon, Intel). Linux is best-effort.
 
-> **New in v0.3:** chord hotkeys like `ctrl+shift+l`. Hold all the keys at once to record, release any one to stop. Combine with `auto_paste` + `auto_submit` for a true voice interface to Claude Code / any chat box.
+> **New in v0.4:** **system-wide key suppression** for chord hotkeys. Terminals map `ctrl+3` → ESC — which would interrupt a running Claude Code session. The daemon now swallows the chord's non-modifier keys at the Quartz event-tap level while push-to-talk is held, so nothing leaks into the focused app. Plus: transcription moved off the event-tap thread (keyboard can never freeze), a `min_hold_ms` accidental-tap guard, sound cues, and whisper vocab `prompt` + greedy `beam_size` for ~2× faster CPU decoding.
+>
+> **v0.3:** chord hotkeys like `ctrl+shift+l`. Hold all the keys at once to record, release any one to stop. Combine with `auto_paste` + `auto_submit` for a true voice interface to Claude Code / any chat box.
 
 ---
 
@@ -65,6 +67,27 @@ dictate once                    # records 5 seconds, transcribes, copies to clip
 dictate listen                  # holds the hotkey to record; ctrl-c to stop
 ```
 
+### Always-on daemon (macOS): spawn from your terminal, not launchd
+
+macOS TCC attributes Accessibility/Input-Monitoring/Microphone to the daemon's
+*responsible process*. Launched from a terminal you've already granted
+(Terminal, iTerm, VS Code), everything works. Launched from launchd via an
+ad-hoc-signed wrapper app, the System Settings toggles show ON but are **not
+honored** — the active tap and synthetic paste silently fail. The reliable
+pattern is a tiny idempotent hook in `~/.zshrc`:
+
+```sh
+case "$TERM_PROGRAM" in
+  Apple_Terminal|iTerm.app|vscode)
+    (~/.local/share/laptop-dictation/ensure-daemon.sh >/dev/null 2>&1 &)
+    ;;
+esac
+```
+
+See `scripts/ensure-daemon.sh`. The daemon detaches (survives the shell) and
+self-heals on every new terminal window — including the first one after a
+reboot.
+
 ## Usage
 
 ```bash
@@ -90,8 +113,9 @@ dictate config
 
 ```toml
 [hotkey]
-key = "alt_r"          # single key (pynput name) — e.g. "alt_r", "ctrl_r", "f9"
-                       # or a chord with "+": "ctrl+shift+l", "cmd+opt+space"
+key = "ctrl+3"         # single key (pynput name) — e.g. "alt_r", "ctrl_r", "f9"
+                       # or a chord with "+": "ctrl+3", "ctrl+shift+l", "cmd+opt+space"
+min_hold_ms = 250      # discard recordings shorter than this (accidental taps)
 
 [recording]
 sample_rate = 16000
@@ -99,19 +123,38 @@ device = "default"     # macOS: "AVFoundation default", or device index
 
 [transcription]
 backend = "whisper-cpp"   # whisper-cpp | openai
-model = "small"           # tiny | base | small | medium | large
+model = "small"           # tiny | base | small | medium | large (.en variants: faster, English-only)
 language = "en"           # ISO code; "auto" for detection
+beam_size = 0             # 1 = greedy decode (~2x faster on CPU); 0 = engine default
+prompt = ""               # vocabulary bias, e.g. "Claude Code, pytest, MCP" — fixes jargon misses
 
 [output]
 copy_to_clipboard = true
-auto_paste = false        # also send cmd+V after copying
+auto_paste = false        # also send cmd+V after copying — text lands at the cursor
 auto_submit = false       # press Enter after paste (great for Claude Code / chat boxes)
 submit_delay_ms = 40      # gap between paste and Enter
+sound_cues = false        # Pop on REC start, Basso on failure (headless REC feedback)
+preserve_clipboard = false # restore the previous clipboard after auto-paste
 
 [paths]
 whisper_cpp = "/opt/homebrew/bin/whisper-cli"
 models_dir = "~/.cache/whisper-cpp"
 ```
+
+### Picking a model for your hardware
+
+Whisper latency is what makes dictation feel instant or broken. Measured on an
+Intel i5-1038NG7 (2020 13" MBP) with an 8-second utterance:
+
+| model · settings | wall time | verdict |
+|---|---|---|
+| `small`, defaults | ~28 s | unusable on Intel |
+| `base.en`, `beam_size = 1` | ~9.5 s | borderline |
+| `tiny.en`, `beam_size = 1` + vocab `prompt` | **~3 s** | ships — jargon stays correct via the prompt |
+
+On Apple Silicon, `small` runs ~10× faster and is the better default. The vocab
+`prompt` is the cheap accuracy lever: `tiny.en` alone wrote "pie test"; with
+`prompt = "Claude Code, pytest, …"` it writes "pytest".
 
 ### Voice-driving Claude Code (or any chat box)
 
@@ -162,9 +205,9 @@ I tried. It mangles "Claude", "MCP", "TypeScript", and any name with mixed case.
 
 ## Roadmap
 
-- [ ] Direct Claude Code integration (auto-paste into the active terminal)
+- [x] Direct Claude Code integration — `ctrl+3` pastes into the active terminal, ESC suppressed (v0.4)
 - [ ] Inline punctuation (whisper.cpp doesn't add commas reliably for streamed audio)
-- [ ] Visual feedback (menu bar icon shows REC state)
+- [ ] Visual feedback (menu bar icon shows REC state — sound cues shipped in v0.4)
 - [ ] Windows support
 - [ ] Streaming transcription (start writing before you stop talking)
 

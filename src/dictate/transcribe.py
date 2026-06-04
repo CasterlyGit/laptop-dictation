@@ -24,7 +24,8 @@ class TranscriptionResult:
 class Backend(Protocol):
     name: str
 
-    def transcribe(self, wav: Path, *, model: str, language: str) -> TranscriptionResult:
+    def transcribe(self, wav: Path, *, model: str, language: str,
+                   beam_size: int = 0, prompt: str = "") -> TranscriptionResult:
         ...
 
 
@@ -40,7 +41,8 @@ class WhisperCppBackend:
     def model_path(self, model: str) -> Path:
         return self.models_dir / f"ggml-{model}.bin"
 
-    def transcribe(self, wav: Path, *, model: str, language: str) -> TranscriptionResult:
+    def transcribe(self, wav: Path, *, model: str, language: str,
+                   beam_size: int = 0, prompt: str = "") -> TranscriptionResult:
         import time
 
         if not Path(self.binary).exists():
@@ -65,6 +67,10 @@ class WhisperCppBackend:
             "-nt",        # no timestamps
             "-otxt",      # write .txt next to wav
         ]
+        if beam_size > 0:
+            cmd += ["-bs", str(beam_size)]  # 1 = greedy decode, ~2x faster on CPU
+        if prompt:
+            cmd += ["--prompt", prompt]     # bias decoding toward domain vocabulary
         start = time.monotonic()
         r = subprocess.run(cmd, check=False, capture_output=True, text=True)
         elapsed_ms = int((time.monotonic() - start) * 1000)
@@ -93,7 +99,8 @@ class OpenAIBackend:
         if not self.api_key:
             raise TranscribeError("OPENAI_API_KEY not set for openai backend.")
 
-    def transcribe(self, wav: Path, *, model: str, language: str) -> TranscriptionResult:
+    def transcribe(self, wav: Path, *, model: str, language: str,
+                   beam_size: int = 0, prompt: str = "") -> TranscriptionResult:
         import time
         try:
             from openai import OpenAI
@@ -106,6 +113,7 @@ class OpenAIBackend:
                 model="whisper-1",
                 file=f,
                 language=language if language != "auto" else None,
+                prompt=prompt or None,  # beam_size is whisper.cpp-only
             )
         elapsed_ms = int((time.monotonic() - start) * 1000)
         return TranscriptionResult(text=resp.text.strip(), backend=self.name, duration_ms=elapsed_ms)

@@ -20,6 +20,7 @@ CONFIG_PATH = Path(os.environ.get("DICTATE_CONFIG", "~/.config/laptop-dictation/
 @dataclass
 class HotkeyConfig:
     key: str = "alt_r"  # pynput key name
+    min_hold_ms: int = 250  # discard recordings shorter than this (accidental taps)
 
 
 @dataclass
@@ -33,6 +34,8 @@ class TranscriptionConfig:
     backend: str = "whisper-cpp"  # whisper-cpp | openai
     model: str = "small"
     language: str = "en"
+    beam_size: int = 0  # whisper.cpp -bs; 1 = greedy (≈2x faster on CPU), 0 = engine default
+    prompt: str = ""  # vocabulary bias, e.g. "Claude Code, pytest, MCP" — fixes jargon misses
 
 
 @dataclass
@@ -41,6 +44,8 @@ class OutputConfig:
     auto_paste: bool = False
     auto_submit: bool = False  # press Enter after paste (sends the message)
     submit_delay_ms: int = 40  # tiny gap between paste and Enter
+    sound_cues: bool = False  # play a system sound on REC start / on failure
+    preserve_clipboard: bool = False  # restore previous clipboard after auto-paste
 
 
 @dataclass
@@ -69,7 +74,8 @@ DEFAULT_TOML = """\
 # laptop-dictation config — edit to taste
 [hotkey]
 key = "alt_r"               # hold-to-talk. single key (pynput names: "alt_r", "f9", "ctrl_r")
-                            # OR a chord with "+": "ctrl+shift+l", "cmd+opt+space"
+                            # OR a chord with "+": "ctrl+3", "ctrl+shift+l", "cmd+opt+space"
+min_hold_ms = 250           # discard recordings shorter than this (accidental taps)
 
 [recording]
 sample_rate = 16000
@@ -77,14 +83,18 @@ device = "default"
 
 [transcription]
 backend = "whisper-cpp"     # whisper-cpp | openai
-model = "small"             # tiny | base | small | medium | large
+model = "small"             # tiny | base | small | medium | large (.en variants are faster for English)
 language = "en"             # ISO code; "auto" for detection
+beam_size = 0               # 1 = greedy decode (~2x faster on CPU); 0 = engine default
+prompt = ""                 # vocabulary bias, e.g. "Claude Code, pytest, MCP, TypeScript"
 
 [output]
 copy_to_clipboard = true
 auto_paste = false          # also send cmd+V after copying
 auto_submit = false         # press Enter after paste (great for Claude Code / chat boxes)
 submit_delay_ms = 40        # gap between paste and Enter
+sound_cues = false          # play a system sound on REC start / on failure
+preserve_clipboard = false  # restore previous clipboard after auto-paste
 
 [paths]
 whisper_cpp = "/opt/homebrew/bin/whisper-cli"
