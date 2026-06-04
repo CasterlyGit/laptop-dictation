@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "laptop-dictation"
-version = "0.1.0"
+version = "0.3.0"
 description = "Push-to-talk dictation for macOS/Linux. Hold a hotkey, speak, get text in your clipboard. Local Whisper, no cloud roundtrip."
 readme = "README.md"
 requires-python = ">=3.11"

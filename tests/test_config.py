@@ -52,6 +52,14 @@ def test_default_toml_parses(tmp_path: Path):
     assert cfg.transcription.model == "small"
 
 
+def test_load_chord_hotkey(tmp_path: Path):
+    """Chord hotkey strings load verbatim from TOML."""
+    p = tmp_path / "c.toml"
+    p.write_text('[hotkey]\nkey = "ctrl+shift+l"\n')
+    cfg = load_config(p)
+    assert cfg.hotkey.key == "ctrl+shift+l"
+
+
 def test_load_auto_submit_override(tmp_path: Path):
     """auto_submit + submit_delay_ms parse from TOML."""
     p = tmp_path / "c.toml"

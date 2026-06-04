@@ -21,9 +21,13 @@ console = Console()
 
 WHISPER_MODELS = {
     "tiny": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
+    "tiny.en": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
     "base": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
+    "base.en": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
     "small": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
+    "small.en": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
     "medium": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
+    "medium.en": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin",
     "large": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin",
 }
 
@@ -77,7 +81,8 @@ def once(seconds: float, model: str | None, backend: str | None, no_copy: bool) 
         models_dir=cfg.paths.models_dir_path,
     )
     try:
-        result = be.transcribe(wav, model=cfg.transcription.model, language=cfg.transcription.language)
+        result = be.transcribe(wav, model=cfg.transcription.model, language=cfg.transcription.language,
+                               beam_size=cfg.transcription.beam_size, prompt=cfg.transcription.prompt)
     finally:
         wav.unlink(missing_ok=True)
     console.print(f"\n[bold]{result.text}[/bold]\n")

@@ -28,6 +28,28 @@ def copy_to_clipboard(text: str) -> None:
         subprocess.run(["clip"], input=text.encode("utf-16-le"), check=False)
 
 
+def read_clipboard() -> str | None:
+    """Read current clipboard text (for preserve-and-restore around auto-paste).
+
+    Returns None when the clipboard can't be read or holds non-text content —
+    callers skip restoration in that case rather than clobber it with "".
+    """
+    try:
+        import pyperclip
+        text = pyperclip.paste()
+        return text if text else None
+    except Exception:
+        pass
+    if platform.system() == "Darwin":
+        try:
+            r = subprocess.run(["pbpaste"], capture_output=True, timeout=2)
+            text = r.stdout.decode(errors="replace")
+            return text if text else None
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+    return None
+
+
 def send_paste_keystroke() -> None:
     """Send cmd+V (macOS) / ctrl+V (others) via pynput. Requires Accessibility on macOS."""
     try:
