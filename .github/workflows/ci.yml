@@ -17,9 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install ffmpeg (ubuntu)
+      - name: Install ffmpeg + xvfb (ubuntu)
+        # pynput's keyboard backend needs an X connection to import; xvfb gives
+        # the headless runner a virtual display so the import (and the
+        # pynput-dependent parsing tests) succeed.
         if: runner.os == 'Linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg xvfb
 
       - name: Install ffmpeg (macos)
         if: runner.os == 'macOS'
@@ -36,5 +39,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Run pytest
+      - name: Run pytest (ubuntu, under xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pytest -ra --tb=short
+
+      - name: Run pytest (macos)
+        if: runner.os == 'macOS'
         run: pytest -ra --tb=short
