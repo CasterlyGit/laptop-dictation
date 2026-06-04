@@ -1,10 +1,14 @@
 # laptop-dictation
 
-**[▶ Live demo](https://casterlygit.github.io/laptop-dictation/)** — interactive: hold the mic button, see a live waveform, release for a transcribed result in a clipboard-style box.
+[![CI](https://github.com/CasterlyGit/laptop-dictation/actions/workflows/ci.yml/badge.svg)](https://github.com/CasterlyGit/laptop-dictation/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
-> Hold a hotkey, speak, get the text in your clipboard. Local Whisper, no cloud round-trip. Built so I can brainstorm with Claude Code on my laptop the same way I do on my phone.
+**Hold a hotkey, speak, release — local Whisper.cpp transcribes in ~250 ms and puts the text straight into your clipboard (or pastes and submits it for you). No cloud, no API key, no five-second timeout.**
 
 **Status:** v0.4 — Wispr-Flow-style insertion: hold `ctrl+3`, speak, release — the text lands wherever your cursor is. Works on macOS (Apple Silicon, Intel). Linux is best-effort.
+
+**[▶ Live demo](https://casterlygit.github.io/laptop-dictation/)** — hold the mic button, see a live waveform, release for a transcribed result in a clipboard-style box.
 
 > **New in v0.4:** **system-wide key suppression** for chord hotkeys. Terminals map `ctrl+3` → ESC — which would interrupt a running Claude Code session. The daemon now swallows the chord's non-modifier keys at the Quartz event-tap level while push-to-talk is held, so nothing leaks into the focused app. Plus: transcription moved off the event-tap thread (keyboard can never freeze), a `min_hold_ms` accidental-tap guard, sound cues, and whisper vocab `prompt` + greedy `beam_size` for ~2× faster CPU decoding.
 >
@@ -14,34 +18,36 @@
 
 ## Why this exists
 
-Dictation on phones is great. Typing kills the flow when you're trying to think out loud. macOS's built-in dictation is fine for one sentence but fumbles on technical vocab and long-form thinking. I wanted:
+macOS's built-in dictation mangles "Claude", "MCP", and mixed-case names, enforces a 60-second hard cutoff, and reformats text mid-sentence. push-to-talk with a local Whisper model fixes all three:
 
-1. **Push-to-talk** — hold a key, talk, release. No "Hey computer". No five-second timeout that cuts you off mid-thought.
-2. **Local** — Whisper running on my own machine. No API key, no network round-trip.
-3. **Clipboard-paste pattern** — works in any app (Claude Code terminal, Obsidian, browser, anywhere `cmd+V` works).
-4. **Decent on programming/Claude-jargon** — Whisper-small or Whisper-medium handles this far better than built-in dictation.
+1. **Push-to-talk** — hold a key, speak, release. No trigger phrase, no timeout mid-thought.
+2. **Local** — Whisper.cpp on your own machine. ~250 ms for a 5-second clip on M2.
+3. **Works in any app** — text lands on your clipboard; `cmd+V` works everywhere.
+4. **Technical vocab** — Whisper-small or medium handles programming jargon and proper nouns far better than built-in dictation.
 
 ---
 
-## How it works
+## Architecture
 
-```
-[ hold hotkey ] ──▶ ffmpeg records mic to WAV
-       │                       │
-       │                       ▼
-[ release hotkey ] ──▶ whisper-cli transcribes WAV
-                               │
-                               ▼
-                       pyperclip → clipboard
-                               │
-                               ▼
-                  (optional) auto-paste keystroke
+```mermaid
+flowchart LR
+    A([Hold hotkey]) --> B[ffmpeg records mic\n16 kHz mono WAV]
+    B --> C([Release hotkey])
+    C --> D[whisper-cli\ntranscribes WAV]
+    D --> E[pyperclip →\nclipboard]
+    E --> F{auto_paste?}
+    F -- yes --> G[cmd+V keystroke]
+    G --> H{auto_submit?}
+    H -- yes --> I[Enter keystroke]
+    F -- no --> J([Done])
+    H -- no --> J
+    I --> J
 ```
 
-- **Hotkey**: global, via `pynput`. Default: hold the Right Option key. Configurable in `~/.config/laptop-dictation/config.toml`.
-- **Recording**: ffmpeg, AVFoundation on macOS, ALSA on Linux. Outputs 16 kHz mono WAV (the format Whisper expects).
-- **Transcription**: pluggable backends. Default is `whisper.cpp` running locally (~250 ms for a 5-second clip on M2). OpenAI Whisper API is a fallback.
-- **Paste**: by default the text lands on your clipboard. With `auto_paste = true` in the config, the tool also types `cmd+V` for you.
+- **Hotkey**: global listener via `pynput`. Default: Right Option. Configurable in `~/.config/laptop-dictation/config.toml`.
+- **Recording**: ffmpeg (AVFoundation on macOS, ALSA on Linux). Outputs 16 kHz mono WAV — the format Whisper expects.
+- **Transcription**: pluggable. Default is `whisper.cpp` running locally (~250 ms/5-second clip on M2). OpenAI Whisper API is a fallback.
+- **Output**: clipboard by default. With `auto_paste = true` it also types `cmd+V`. With `auto_submit = true` it presses Enter too — making dictation a full voice interface for Claude Code or any chat box.
 
 ---
 
@@ -51,11 +57,11 @@ Dictation on phones is great. Typing kills the flow when you're trying to think 
 # 1. Clone + install deps
 git clone https://github.com/CasterlyGit/laptop-dictation.git
 cd laptop-dictation
-./scripts/setup.sh              # installs ffmpeg + whisper.cpp + python deps
+./scripts/setup.sh              # installs ffmpeg + whisper.cpp + Python deps + small model
 
-# 2. macOS only: grant Accessibility + Microphone permissions
+# 2. macOS: grant Accessibility + Microphone permissions
 #    System Settings → Privacy & Security → Accessibility / Microphone
-#    Add: Terminal (or whichever shell you run dictate from)
+#    Add your terminal app
 
 # 3. First-run config (writes ~/.config/laptop-dictation/config.toml)
 dictate init
@@ -64,7 +70,7 @@ dictate init
 dictate once                    # records 5 seconds, transcribes, copies to clipboard
 
 # 5. Start the daemon
-dictate listen                  # holds the hotkey to record; ctrl-c to stop
+dictate listen                  # hold Right Option to record; ctrl-c to stop
 ```
 
 ### Always-on daemon (macOS): spawn from your terminal, not launchd
@@ -88,24 +94,31 @@ See `scripts/ensure-daemon.sh`. The daemon detaches (survives the shell) and
 self-heals on every new terminal window — including the first one after a
 reboot.
 
+---
+
 ## Usage
 
 ```bash
 # Daemon mode — hold Right Option, talk, release. Text lands on clipboard.
 dictate listen
 
-# One-shot — useful for testing or for a non-hotkey integration
+# One-shot — useful for testing or scripting
 dictate once --seconds 10
 
 # Override the model on the fly
 dictate listen --model medium
 
-# Use OpenAI's API instead of local whisper.cpp
+# Use OpenAI Whisper API instead of local whisper.cpp
 dictate listen --backend openai
 
 # Show your current config
 dictate config
+
+# Verify everything is wired up
+dictate doctor
 ```
+
+---
 
 ## Config file
 
@@ -158,7 +171,7 @@ On Apple Silicon, `small` runs ~10× faster and is the better default. The vocab
 
 ### Voice-driving Claude Code (or any chat box)
 
-Set both flags on and pick a hotkey that doesn't conflict with your editor:
+Enable both flags and pick a hotkey that doesn't conflict with your editor:
 
 ```toml
 [hotkey]
@@ -170,9 +183,11 @@ auto_paste = true
 auto_submit = true
 ```
 
-Now: focus the Claude chat box in VSCode → hold right-option → speak → release → message appears and sends. No keyboard, no clicks.
+Focus the Claude chat box in VSCode → hold right-option → speak → release → message appears and sends. No keyboard, no clicks.
 
-**Note for Mac users:** there's no "Windows" key on macOS. The available hold-keys are `alt_r` / `alt_l` (option), `ctrl_r` / `ctrl_l`, `cmd_r` / `cmd_l`, or function keys like `f9`. Pick one your editor doesn't capture.
+**Mac note:** available hold-keys are `alt_r` / `alt_l` (Option), `ctrl_r` / `ctrl_l`, `cmd_r` / `cmd_l`, or function keys like `f9`. Pick one your editor doesn't capture.
+
+---
 
 ### Chord hotkeys (v0.3+)
 
@@ -187,11 +202,13 @@ Generic modifier names (`ctrl`, `shift`, `alt`/`opt`, `cmd`) accept either left 
 
 ## Models
 
-- **tiny** — 75 MB, fastest, OK for clear speech. Use when speed matters.
-- **base** — 142 MB, noticeably better on technical words.
-- **small** — 466 MB, good default. ~250 ms per second of audio on M2.
-- **medium** — 1.5 GB, best balance for programming / Claude vocabulary.
-- **large** — 3 GB, slowest, marginal gain over medium.
+| Model  | Size   | Speed (M2)    | Notes                                      |
+|--------|--------|---------------|--------------------------------------------|
+| tiny   | 75 MB  | ~100 ms/5 s   | Fastest; OK for clear speech               |
+| base   | 142 MB | ~150 ms/5 s   | Noticeably better on technical words       |
+| small  | 466 MB | ~250 ms/5 s   | **Default.** Good balance for most uses    |
+| medium | 1.5 GB | ~500 ms/5 s   | Best for programming / Claude vocabulary   |
+| large  | 3 GB   | ~900 ms/5 s   | Marginal gain over medium; slowest         |
 
 The setup script downloads `small` by default. To switch:
 
@@ -199,18 +216,32 @@ The setup script downloads `small` by default. To switch:
 dictate model download medium
 ```
 
-## Why not the macOS built-in dictation?
-
-I tried. It mangles "Claude", "MCP", "TypeScript", and any name with mixed case. It also has a hard 60-second cutoff and reformats your text mid-sentence. For long-form thinking-out-loud, it's a no.
+---
 
 ## Roadmap
 
 - [x] Direct Claude Code integration — `ctrl+3` pastes into the active terminal, ESC suppressed (v0.4)
 - [ ] Inline punctuation (whisper.cpp doesn't add commas reliably for streamed audio)
-- [ ] Visual feedback (menu bar icon shows REC state — sound cues shipped in v0.4)
+- [ ] Menu bar icon showing REC state (sound cues shipped in v0.4)
 - [ ] Windows support
 - [ ] Streaming transcription (start writing before you stop talking)
 
+---
+
+## Live demo
+
+[casterlygit.github.io/laptop-dictation](https://casterlygit.github.io/laptop-dictation/) — interactive: hold the mic button, see a live waveform, release for a transcribed result in a clipboard-style box.
+
+---
+
 ## Companion projects
 
-- [emergency-ai](https://github.com/CasterlyGit/emergency-ai) — same author. Voice input there will reuse this tool's recording + transcription layer.
+- [curby](https://github.com/CasterlyGit/curby) — voice + gesture macOS controller; uses dictation for spoken commands
+- [hand-signal](https://github.com/CasterlyGit/hand-signal) — gesture recognition layer that pairs with voice input
+- [emergency-ai](https://github.com/CasterlyGit/emergency-ai) — offline AI triage tool; shares the recording + transcription layer
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
