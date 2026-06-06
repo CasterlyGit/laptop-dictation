@@ -35,6 +35,7 @@ import re
 
 from .config import Config
 from .output import copy_to_clipboard, read_clipboard, send_enter_keystroke, send_paste_keystroke
+from .notch import set_status as _notch_status
 from .recorder import start_recording, stop_recording
 from .transcribe import build_backend
 
@@ -232,8 +233,14 @@ def _make_darwin_intercept(slots: list[frozenset[str]], state: dict, vks: set[in
     return intercept
 
 
-def run_listener(cfg: Config) -> None:
-    """Block forever. Hold-to-record, release-to-transcribe."""
+def run_listener(cfg: Config, on_text=None) -> None:
+    """Block forever. Hold-to-record, release-to-transcribe.
+
+    on_text: optional callable(str). When given, the transcript is handed to it
+    INSTEAD of the clipboard/paste pipeline — the sink seam that lets other
+    daemons (e.g. conductor-ptt) reuse the whole PTT stack with a different
+    output. Exceptions from on_text are caught and logged; the daemon survives.
+    """
     from pynput.keyboard import Listener
 
     slots = parse_hotkey(cfg.hotkey.key)
@@ -243,10 +250,25 @@ def run_listener(cfg: Config) -> None:
         models_dir=cfg.paths.models_dir_path,
     )
 
+    # Moonshine loads its ONNX model in-process (~seconds, plus a one-time HF
+    # download). Warm it on a side thread so the first dictation doesn't stall.
+    warmup = getattr(backend, "warmup", None)
+    if warmup is not None:
+        def _warm() -> None:
+            try:
+                warmup(cfg.transcription.model)
+                console.print(f"[dim]{backend.name} model warm[/dim]")
+            except Exception as e:  # first dictation will retry + surface the error
+                console.print(f"[yellow]model warmup failed: {e}[/yellow]")
+        threading.Thread(target=_warm, name="model-warmup", daemon=True).start()
+
     state: dict = {
         "proc": None,
         "wav": None,
         "active": False,
+        "recording": False,   # toggle mode: are we currently capturing?
+        "chord_down": False,  # toggle mode: chord currently held (edge-detect taps)
+        "last_toggle": 0.0,   # toggle mode: debounce double-fires
         "started_at": 0.0,
         "held": set(),
         "suppressed_vks": set(),
@@ -335,6 +357,7 @@ def run_listener(cfg: Config) -> None:
             state["proc"] = proc
             state["wav"] = wav
             state["started_at"] = time.monotonic()
+            _notch_status("listening")
 
     def end():
         # Capture the paste target NOW — transcription takes seconds and the user
@@ -353,7 +376,9 @@ def run_listener(cfg: Config) -> None:
             console.print(f"[dim](tap too short — {held_ms} ms, discarded)[/dim]")
             _log(f"discarded: held {held_ms} ms < min {cfg.hotkey.min_hold_ms} ms")
             wav.unlink(missing_ok=True)
+            _notch_status("idle")
             return
+        _notch_status("transcribing")
         console.print("[dim]transcribing…[/dim]")
         try:
             result = backend.transcribe(
@@ -364,6 +389,7 @@ def run_listener(cfg: Config) -> None:
             console.print(f"[red]transcription failed:[/red] {e}")
             _log(f"transcription failed: {e!r}")
             sound("Basso")
+            _notch_status("idle")
             return
         finally:
             wav.unlink(missing_ok=True)
@@ -371,9 +397,21 @@ def run_listener(cfg: Config) -> None:
         if not text:
             console.print("[yellow](no speech detected)[/yellow]")
             _log(f"no speech (held {held_ms} ms, raw={result.text!r})")
+            _notch_status("idle")
             return
         console.print(f"[green]✔[/green] {text}  [dim]({result.backend}, {result.duration_ms} ms)[/dim]")
         _log(f"✔ {text!r} ({result.backend}, {result.duration_ms} ms, held {held_ms} ms)")
+        if on_text is not None:
+            # Sink seam: hand the transcript to the embedding daemon and skip
+            # the clipboard/paste pipeline entirely.
+            try:
+                on_text(text)
+            except Exception as e:
+                console.print(f"[red]on_text sink failed:[/red] {e}")
+                _log(f"on_text sink failed: {e!r}")
+                sound("Basso")
+            _notch_status("idle")
+            return
         prev_clip = read_clipboard() if cfg.output.preserve_clipboard else None
         if cfg.output.copy_to_clipboard or cfg.output.auto_paste:
             copy_to_clipboard(text)
@@ -384,6 +422,7 @@ def run_listener(cfg: Config) -> None:
             if prev_clip is not None:
                 time.sleep(0.35)  # let the focused app consume the paste first
                 copy_to_clipboard(prev_clip)
+        _notch_status("idle")
 
     def worker():
         while True:
@@ -398,19 +437,39 @@ def run_listener(cfg: Config) -> None:
                 _log(f"worker error: {e!r}")
                 sound("Basso")
                 if job == "begin":
-                    # begin() failed before recording started: clear the active
-                    # latch or the next chord press would be silently ignored.
+                    # begin() failed before recording started: clear the latches
+                    # or the next chord press would be silently ignored.
                     state["active"] = False
+                    state["recording"] = False
 
     threading.Thread(target=worker, daemon=True, name="dictate-worker").start()
 
     # Callbacks run inside the event-tap callback: set ops + queue put ONLY.
+    toggle_mode = cfg.hotkey.mode == "toggle"
+
     def on_press(key):
         name = normalize_key(key)
         if name is None:
             return
         state["held"].add(name)
-        if not state["active"] and chord_satisfied(slots, state["held"]):
+        if not chord_satisfied(slots, state["held"]):
+            return
+        if toggle_mode:
+            # fire once per fresh chord press (ignore auto-repeat key-downs)
+            if state["chord_down"]:
+                return
+            state["chord_down"] = True
+            now = time.monotonic()
+            if now - state["last_toggle"] < 0.4:  # debounce accidental double-tap
+                return
+            state["last_toggle"] = now
+            if not state["recording"]:
+                state["recording"] = True
+                jobs.put("begin")
+            else:
+                state["recording"] = False
+                jobs.put("end")
+        elif not state["active"]:
             state["active"] = True
             jobs.put("begin")
 
@@ -419,7 +478,11 @@ def run_listener(cfg: Config) -> None:
         if name is None:
             return
         state["held"].discard(name)
-        if state["active"] and not chord_satisfied(slots, state["held"]):
+        if chord_satisfied(slots, state["held"]):
+            return
+        if toggle_mode:
+            state["chord_down"] = False  # chord fully released; arm next tap
+        elif state["active"]:
             state["active"] = False
             jobs.put("end")
 

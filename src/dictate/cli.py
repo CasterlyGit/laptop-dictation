@@ -109,6 +109,39 @@ def listen(model: str | None, backend: str | None) -> None:
         console.print("\n[dim]bye[/dim]")
 
 
+@cli.command()
+@click.option("--hotkey", default="ctrl+0", show_default=True,
+              help="Push-to-talk chord for command mode.")
+@click.option("--model", default=None, help="Override model name.")
+@click.option("--backend", default=None, help="Override backend.")
+def command(hotkey: str, model: str | None, backend: str | None) -> None:
+    """Start the voice-COMMAND daemon: hold the hotkey, speak a command
+    ("notch white"), and it's applied live instead of pasted at the cursor."""
+    cfg = load_config()
+    cfg.hotkey.key = hotkey
+    cfg.hotkey.mode = "hold"          # hold-to-talk, never toggle
+    cfg.output.auto_paste = False     # we route via the sink, never paste
+    if model:
+        cfg.transcription.model = model
+    if backend:
+        cfg.transcription.backend = backend
+
+    from .command import handle as run_command
+    from .listener import run_listener
+
+    def sink(text: str) -> None:
+        applied = run_command(text)
+        if applied is not None:
+            console.print(f"[green]✔ notch → {applied}[/green]")
+        else:
+            console.print(f"[yellow](no command matched)[/yellow] {text!r}")
+
+    try:
+        run_listener(cfg, on_text=sink)
+    except KeyboardInterrupt:
+        console.print("\n[dim]bye[/dim]")
+
+
 @cli.group()
 def model() -> None:
     """Manage whisper.cpp models."""

@@ -5,7 +5,7 @@ Push-to-talk dictation daemon: hold a hotkey → ffmpeg records mic → whisper.
 ## Key files
 - `src/dictate/listener.py` — hotkey daemon: chord parsing, vk-first normalization, Quartz suppression intercept, worker-thread pipeline
 - `src/dictate/recorder.py` — ffmpeg AVFoundation mic capture (16 kHz mono WAV)
-- `src/dictate/transcribe.py` — whisper.cpp / OpenAI backends; beam_size + vocab prompt passthrough
+- `src/dictate/transcribe.py` — whisper.cpp / Moonshine ONNX / OpenAI backends; beam_size + vocab prompt passthrough (whisper-only)
 - `src/dictate/output.py` — clipboard copy/read, synthetic cmd+V / Enter
 - `src/dictate/config.py` — `~/.config/laptop-dictation/config.toml` loader + defaults
 - `src/dictate/cli.py` — `dictate init|once|listen|config|model download`
@@ -34,6 +34,8 @@ tail -f ~/Library/Logs/laptop-dictation.log         # trace; first line logs AXI
 ## Current state & active work
 - LIVE: terminal-spawned daemon. `~/.zshrc` hook → `~/.local/share/laptop-dictation/ensure-daemon.sh` → `dictate listen` (nohup, PPID 1). Hotkey ctrl+3, auto_paste on, auto_submit off. **Verified end-to-end 2026-06-04** (acoustic: spoke → transcribed → pasted into TextEdit; AXIsProcessTrusted=True; tap re-arm spam=0).
 - The old launchd agent + `~/Applications/LaptopDictation.app` wrapper are ABANDONED (ad-hoc TCC not honored; tried bash-exec stub, compiled exec launcher, compiled fork launcher, manual TCC re-adds, tccutil resets — all FALSE; self-signed cert blocked on interactive keychain auth). The full rationale lives in `scripts/ensure-daemon.sh`.
-- Perf (Intel i5-1038NG7, benchmarked 2026-06-04): tiny.en + beam_size=1 + vocab prompt ≈ 0.45× realtime (the live config); base.en ≈ 1.2× (too slow); small ≈ 3.5× (unusable). On Apple Silicon, small would be fine.
-- Vocab prompt in user config fixes jargon ("pie test" → "pytest").
-- Roadmap: streaming transcription (start decoding before release), menu-bar REC indicator.
+- Perf (Intel i5-1038NG7, benchmarked 2026-06-04): **moonshine base/int8 (the live config) = 0.87s for a 4.5s utterance (~0.18× realtime) vs whisper.cpp tiny.en 3.54s (4× faster), at better published WER.** Whisper pads every clip to 30s so it barely speeds up on short utterances; Moonshine scales with clip length. whisper.cpp numbers: tiny.en+greedy ≈ 0.45×; base.en ≈ 1.2×; small ≈ 3.5× (unusable). On Apple Silicon, whisper small would be fine.
+- **Moonshine backend install caveat**: `useful-moonshine-onnx` hard-depends on librosa → numba, which does not build on Intel macs. Install with `pip install --no-deps useful-moonshine-onnx && pip install onnxruntime tokenizers huggingface_hub numpy` (librosa is only lazy-imported for path inputs; we pass numpy arrays). The official `moonshine-voice` C-lib wheel is arm64-only — unusable here; its v2 streaming models (small/medium-streaming, WER 6.65%) need an x86_64 source build of libmoonshine — that's the phase-2 streaming path.
+- Moonshine models are English-only, ≤64s per call (backend chunks longer clips at quietest window), and ignore beam_size/prompt. Vocab prompt still applies to the whisper-cpp fallback ("pie test" → "pytest"); moonshine base got "PyTest" right natively in the bench.
+- Daemon preloads the moonshine model on a warmup thread at startup (`moonshine model warm` in out.log) so the first dictation doesn't stall.
+- Roadmap: streaming transcription (start decoding before release — Moonshine v2 streaming models via x86_64 libmoonshine build, partials → notch via existing ledge bridge), menu-bar REC indicator.

@@ -20,6 +20,7 @@ CONFIG_PATH = Path(os.environ.get("DICTATE_CONFIG", "~/.config/laptop-dictation/
 @dataclass
 class HotkeyConfig:
     key: str = "alt_r"  # pynput key name
+    mode: str = "hold"  # "hold" = push-to-talk; "toggle" = tap to start, tap again to stop
     min_hold_ms: int = 250  # discard recordings shorter than this (accidental taps)
 
 
@@ -31,7 +32,7 @@ class RecordingConfig:
 
 @dataclass
 class TranscriptionConfig:
-    backend: str = "whisper-cpp"  # whisper-cpp | openai
+    backend: str = "whisper-cpp"  # whisper-cpp | moonshine | openai
     model: str = "small"
     language: str = "en"
     beam_size: int = 0  # whisper.cpp -bs; 1 = greedy (≈2x faster on CPU), 0 = engine default
@@ -73,8 +74,9 @@ class Config:
 DEFAULT_TOML = """\
 # laptop-dictation config — edit to taste
 [hotkey]
-key = "alt_r"               # hold-to-talk. single key (pynput names: "alt_r", "f9", "ctrl_r")
+key = "alt_r"               # single key (pynput names: "alt_r", "f9", "ctrl_r")
                             # OR a chord with "+": "ctrl+3", "ctrl+shift+l", "cmd+opt+space"
+mode = "hold"               # "hold" = push-to-talk; "toggle" = tap to start, tap again to stop
 min_hold_ms = 250           # discard recordings shorter than this (accidental taps)
 
 [recording]
@@ -82,8 +84,9 @@ sample_rate = 16000
 device = "default"
 
 [transcription]
-backend = "whisper-cpp"     # whisper-cpp | openai
-model = "small"             # tiny | base | small | medium | large (.en variants are faster for English)
+backend = "whisper-cpp"     # whisper-cpp | moonshine | openai
+model = "small"             # whisper: tiny | base | small | medium | large (.en variants faster for English)
+                            # moonshine: tiny | base (English-only; 4x faster than whisper tiny.en on Intel CPU)
 language = "en"             # ISO code; "auto" for detection
 beam_size = 0               # 1 = greedy decode (~2x faster on CPU); 0 = engine default
 prompt = ""                 # vocabulary bias, e.g. "Claude Code, pytest, MCP, TypeScript"

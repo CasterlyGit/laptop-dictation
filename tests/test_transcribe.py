@@ -57,3 +57,74 @@ def test_whispercpp_missing_binary_raises(tmp_path):
             be.transcribe(fake_wav, model="small", language="en")
     finally:
         shutil.which = orig_which
+
+
+# --- moonshine backend ---------------------------------------------------
+
+
+def test_build_backend_moonshine():
+    from dictate.transcribe import MoonshineBackend
+
+    be = build_backend("moonshine", whisper_cpp_binary="/x", models_dir=Path("/x"))
+    assert isinstance(be, MoonshineBackend)
+    assert be.name == "moonshine"
+
+
+def test_moonshine_model_name_mapping():
+    from dictate.transcribe import moonshine_model_name
+
+    assert moonshine_model_name("tiny") == "moonshine/tiny"
+    assert moonshine_model_name("tiny.en") == "moonshine/tiny"
+    assert moonshine_model_name("Base") == "moonshine/base"
+    assert moonshine_model_name("moonshine/base") == "moonshine/base"
+    with pytest.raises(TranscribeError, match="tiny|base"):
+        moonshine_model_name("small")
+
+
+def test_moonshine_rejects_non_english(tmp_path: Path):
+    from dictate.transcribe import MoonshineBackend
+
+    be = MoonshineBackend()
+    with pytest.raises(TranscribeError, match="English-only"):
+        be.transcribe(tmp_path / "x.wav", model="base", language="de")
+
+
+def test_moonshine_missing_dep_message(monkeypatch, tmp_path: Path):
+    """Without moonshine_onnx installed, the error must carry install commands."""
+    import sys
+
+    from dictate.transcribe import MoonshineBackend
+
+    monkeypatch.setitem(sys.modules, "moonshine_onnx", None)  # forces ImportError
+    be = MoonshineBackend()
+    with pytest.raises(TranscribeError, match="--no-deps useful-moonshine-onnx"):
+        be.transcribe(tmp_path / "x.wav", model="base", language="en")
+
+
+def test_chunk_spans_short_clip_single_span():
+    np = pytest.importorskip("numpy")
+    from dictate.transcribe import chunk_spans
+
+    audio = np.zeros(16000 * 10, dtype=np.float32)  # 10s
+    assert chunk_spans(audio, 16000) == [(0, len(audio))]
+
+
+def test_chunk_spans_long_clip_cuts_at_silence():
+    np = pytest.importorskip("numpy")
+    from dictate.transcribe import chunk_spans
+
+    sr = 16000
+    rng = np.random.default_rng(0)
+    audio = rng.uniform(-0.5, 0.5, 130 * sr).astype(np.float32)  # 130s of "speech"
+    audio[55 * sr:56 * sr] = 0.0    # silence inside chunk 1's search window
+    audio[112 * sr:113 * sr] = 0.0  # silence inside chunk 2's search window
+
+    spans = chunk_spans(audio, sr)
+    # contiguous full cover
+    assert spans[0][0] == 0 and spans[-1][1] == len(audio)
+    assert all(a[1] == b[0] for a, b in zip(spans, spans[1:]))
+    # every span within the 64s hard limit
+    assert all((hi - lo) <= 60 * sr for lo, hi in spans)
+    # cuts landed inside the silent second, not mid-speech
+    assert 55 * sr <= spans[0][1] <= 56 * sr
+    assert 112 * sr <= spans[1][1] <= 113 * sr
