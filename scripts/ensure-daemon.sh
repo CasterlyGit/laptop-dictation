@@ -60,4 +60,6 @@ ensure_daemon() {
 }
 
 ensure_daemon listen
-ensure_daemon command --hotkey ctrl+0
+# ctrl+0 is owned by conductor_ptt.py (the Caster entrance) — see
+# ~/Documents/Dev/conductor/scripts/ensure-ptt-daemon.sh. Two taps on one
+# chord fight each other; the dictate-command daemon is retired (2026-06-05).
