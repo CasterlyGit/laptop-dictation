@@ -1,0 +1,14 @@
+{
+  "version": "0.1.0-experimental",
+  "source_commit": "d558bb020556488fcf919f554f99e8beab6bb373",
+  "workflow_run": "https://github.com/CasterlyGit/laptop-dictation/actions/runs/34522862272",
+  "sha256": "ca977f725ad4ec786b501d73a20749c141920476c7b74a48eccce5a0c51088a7",
+  "architectures": [
+    "arm64",
+    "x86_64"
+  ],
+  "minimum_macos": "14.0",
+  "signature": "ad-hoc",
+  "notarized": false,
+  "physical_macbook_testing": "pending"
+}
