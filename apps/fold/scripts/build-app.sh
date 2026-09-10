@@ -20,6 +20,7 @@ for bundle in "$binary_dir"/*.bundle; do
   [[ -d "$bundle" ]] && ditto "$bundle" "$app_dir/Contents/Resources/$(basename "$bundle")"
 done
 cp packaging/Info.plist "$app_dir/Contents/Info.plist"
+cp LICENSE "$app_dir/Contents/Resources/LICENSE.txt"
 if [[ "${FOLD_VALIDATE_METAL:-0}" == 1 ]]; then
   xcrun -sdk macosx metal -c Sources/Fold/Resources/Fold.metal -o .build/Fold.air
 fi

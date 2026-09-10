@@ -43,7 +43,11 @@ For the sample effect, drag the preview slider or choose **Play with sound**. Ph
 
 ### Downloadable builds
 
-Successful **Fold macOS** workflow runs produce a `Fold-macOS` artifact with an ad-hoc-signed universal app ZIP and its SHA-256 digest. These are experimental builds, not notarized releases. Local source builds are the zero-cost installation path. No paid Apple developer membership is needed to build locally.
+The public experimental app ZIP and its SHA-256 digest are in [downloads](downloads). Unzip it, move `Fold.app` into Applications, and open it. It supports Apple silicon and Intel at the binary level; physical sensor support is detected separately.
+
+The app is ad-hoc signed and **not notarized**. If macOS blocks the download and you choose to trust this build, use the per-app **Open Anyway** option in System Settings → Privacy & Security after attempting to open it. [Apple's instructions](https://support.apple.com/en-us/102445) explain the prompt. You can also build from source using the commands above. No paid Apple developer membership is needed to build locally.
+
+Successful **Fold macOS** workflow runs also produce a `Fold-macOS` artifact. Download provenance is recorded with the public ZIP.
 
 ## Development
 

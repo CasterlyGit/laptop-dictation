@@ -8,7 +8,7 @@ The suite checks report lengths/IDs/units/ranges, invalid numerical inputs, mono
 
 **Native macOS build: passed.** [GitHub Actions run 34522291951](https://github.com/CasterlyGit/laptop-dictation/actions/runs/34522291951) built commit `2852380513e40b233d7cf426b7c471e83ab417e6` on a macOS 15 ARM64 runner using Xcode 16.4 and the macOS 15.5 SDK. Both `arm64` and `x86_64` app slices compiled and linked with a macOS 14 deployment target. The Metal compiler, sanitizer tests, ad-hoc signing, signature verification, and ZIP packaging all passed. The compiler flagged two main-run-loop timer closures for future Swift 6 isolation; the follow-up explicitly marks their main-actor context.
 
-This validates compilation and packaging, not physical MacBook behavior. Subsequent builds also run the packaged executable's `--check-resources` path to ensure its resources can be located.
+The follow-up [run 34522641685](https://github.com/CasterlyGit/laptop-dictation/actions/runs/34522641685), commit `ce4e7419c5a713c135caa97cf86053b723fd99d2`, passed without compiler warnings. It also ran the packaged executable's `--check-resources` path and confirmed that both resources resolve inside the app, rather than in the build directory. This validates compilation and packaging, not physical MacBook behavior. The final packaging step adds the MIT license to the signed bundle; its build provenance is recorded beside the download.
 
 ## Physical checks still required
 
