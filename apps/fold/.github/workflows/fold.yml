@@ -1,0 +1,49 @@
+name: Fold macOS
+on:
+  push:
+    branches: [main, fold]
+    paths: ['apps/fold/**', '.github/workflows/fold.yml', 'Sources/**', 'Tests/**', 'scripts/**', 'packaging/**', 'Package.swift']
+  pull_request:
+    paths: ['apps/fold/**', '.github/workflows/fold.yml', 'Sources/**', 'Tests/**', 'scripts/**', 'packaging/**', 'Package.swift']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fold-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locate project
+        id: project
+        run: |
+          if [ -f apps/fold/Package.swift ]; then
+            echo 'path=apps/fold' >> "$GITHUB_OUTPUT"
+          else
+            echo 'path=.' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Core regression checks with sanitizers
+        working-directory: ${{ steps.project.outputs.path }}
+        run: bash scripts/test-core.sh
+      - name: Build and validate the app
+        working-directory: ${{ steps.project.outputs.path }}
+        env:
+          FOLD_UNIVERSAL: '1'
+          FOLD_VALIDATE_METAL: '1'
+        run: bash scripts/build-app.sh
+      - name: Package app and source
+        working-directory: ${{ steps.project.outputs.path }}
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent dist/Fold.app dist/Fold-macOS.zip
+          shasum -a 256 dist/Fold-macOS.zip > dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fold-macOS
+          path: |
+            ${{ steps.project.outputs.path }}/dist/Fold-macOS.zip
+            ${{ steps.project.outputs.path }}/dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
