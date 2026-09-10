@@ -6,7 +6,9 @@ The shared C core passed its regression suite on Linux with GCC, `-Wall -Wextra 
 
 The suite checks report lengths/IDs/units/ranges, invalid numerical inputs, monotonic bend progress, signed movement, stationary velocity decay, exactly one open click per cycle, stale-history reset, all mesh positions and triangle winding across 101 fold amounts, and audio silence/output bounds at 44.1, 48, and 96 kHz.
 
-**Native macOS build: pending CI.** Source generation and C checks do not establish that the Swift app compiles or works on a MacBook. This line must be updated with the actual build result before announcing a compiled release.
+**Native macOS build: passed.** [GitHub Actions run 34522291951](https://github.com/CasterlyGit/laptop-dictation/actions/runs/34522291951) built commit `2852380513e40b233d7cf426b7c471e83ab417e6` on a macOS 15 ARM64 runner using Xcode 16.4 and the macOS 15.5 SDK. Both `arm64` and `x86_64` app slices compiled and linked with a macOS 14 deployment target. The Metal compiler, sanitizer tests, ad-hoc signing, signature verification, and ZIP packaging all passed. The compiler flagged two main-run-loop timer closures for future Swift 6 isolation; the follow-up explicitly marks their main-actor context.
+
+This validates compilation and packaging, not physical MacBook behavior. Subsequent builds also run the packaged executable's `--check-resources` path to ensure its resources can be located.
 
 ## Physical checks still required
 

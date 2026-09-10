@@ -4,7 +4,7 @@
 
 Close your MacBook lid and the desktop bends toward its hinge. Open it and everything settles back. Add a soft movement sound, a quiet open click, or keep it silent.
 
-**Status: experimental 0.1.0.** Native build validation is in progress. Physical lid tracking, permissions, sleep/wake, and perceived audio latency require a real MacBook test before a stable release.
+**Status: experimental 0.1.0.** The universal macOS build, Metal shader validation, and sanitized C tests pass. Physical lid tracking, permissions, sleep/wake, and perceived audio latency still require a real MacBook test before a stable release.
 
 ## What it does
 
@@ -17,6 +17,8 @@ Close your MacBook lid and the desktop bends toward its hinge. Open it and every
 
 ## Try it
 
+[Source and build history](https://github.com/CasterlyGit/laptop-dictation/tree/fold/apps/fold) · [macOS build run](https://github.com/CasterlyGit/laptop-dictation/actions/runs/34522291951)
+
 Requires **macOS 14+**, Metal, and a supported lid sensor for the real effect. Preview works without a sensor or Screen Recording permission. Runtime probing decides support; a blanket “all Apple silicon” claim would be inaccurate. Some M1/M2 models expose no usable angle interface.
 
 With the free Xcode Command Line Tools installed, open Terminal in this folder and run:
@@ -26,6 +28,14 @@ bash Install.command
 ```
 
 The script builds the app locally, installs it to `~/Applications/Fold.app`, and opens it. No administrator password is required. If the tools are missing, install them with `xcode-select --install` and rerun the command.
+
+To get the standalone package from its current development branch:
+
+```sh
+git clone --branch fold --single-branch https://github.com/CasterlyGit/laptop-dictation.git
+cd laptop-dictation/apps/fold
+bash Install.command
+```
 
 Choose **Enable on my Mac**. Allow Screen Recording when macOS asks; if requested, quit and reopen Fold after granting it. The permission lets the effect redraw the desktop; the app has no recording or upload feature.
 

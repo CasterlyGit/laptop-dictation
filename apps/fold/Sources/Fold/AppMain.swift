@@ -109,6 +109,18 @@ private final class PauseHotKey {
 
 @main enum FoldMain {
     @MainActor static func main() {
+        if CommandLine.arguments.contains("--check-resources") {
+            for (name, ext) in [("Fold", "metal"), ("Desktop", "png")] {
+                guard let url = Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Resources"),
+                      url.path.hasPrefix(Bundle.main.bundleURL.path + "/"),
+                      let data = try? Data(contentsOf: url), !data.isEmpty else {
+                    fputs("Missing packaged resource: \(name).\(ext)\n", stderr)
+                    exit(1)
+                }
+            }
+            print("Packaged resources OK")
+            return
+        }
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         let delegate = AppDelegate()

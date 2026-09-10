@@ -25,4 +25,5 @@ if [[ "${FOLD_VALIDATE_METAL:-0}" == 1 ]]; then
 fi
 codesign --force --deep --sign - "$app_dir"
 codesign --verify --deep --strict "$app_dir"
+"$app_dir/Contents/MacOS/Fold" --check-resources
 echo "Built $app_dir"

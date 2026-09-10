@@ -183,11 +183,14 @@ private final class OverlayPanel: NSPanel {
         fold_motion_reset(&previewMotion)
         previewStarted = ProcessInfo.processInfo.systemUptime
         let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            let t = ProcessInfo.processInfo.systemUptime - self.previewStarted
-            if t >= 5 { self.previewAngle = 120; self.previewStep(); self.stopPreview(); return }
-            self.previewAngle = 120 - 96 * pow(sin(.pi * t / 5), 2)
-            self.previewStep()
+            // The timer is explicitly added to RunLoop.main below.
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let t = ProcessInfo.processInfo.systemUptime - self.previewStarted
+                if t >= 5 { self.previewAngle = 120; self.previewStep(); self.stopPreview(); return }
+                self.previewAngle = 120 - 96 * pow(sin(.pi * t / 5), 2)
+                self.previewStep()
+            }
         }
         previewTimer = timer
         RunLoop.main.add(timer, forMode: .common)
@@ -217,9 +220,11 @@ private final class OverlayPanel: NSPanel {
         lastSensorTime = ProcessInfo.processInfo.systemUptime
         sensor.start(continuous: true)
         let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self, self.enabled else { return }
-            if ProcessInfo.processInfo.systemUptime - self.lastSensorTime > 0.75 {
-                self.pause(); self.message = "Lid readings stopped. Fold has cleared the desktop."
+            MainActor.assumeIsolated {
+                guard let self, self.enabled else { return }
+                if ProcessInfo.processInfo.systemUptime - self.lastSensorTime > 0.75 {
+                    self.pause(); self.message = "Lid readings stopped. Fold has cleared the desktop."
+                }
             }
         }
         watchdog = timer; RunLoop.main.add(timer, forMode: .common)
